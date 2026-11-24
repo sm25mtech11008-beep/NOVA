@@ -234,3 +234,24 @@ REQUIRES_CONFIRMATION = [
     "send_email",
     "financial_transaction",
 ]
+
+
+# ─────────────────────────────────────────
+# Compact prompt actually sent to the conversation model.
+# Small local models follow short, concrete instructions far better than
+# the long design document above, and a shorter prompt answers faster.
+# ─────────────────────────────────────────
+VOICE_SYSTEM_PROMPT = """You are Nova, a friendly, slightly witty voice assistant on the user's computer. Your words are spoken aloud: answer in one or two short sentences of plain conversational English, no markdown, lists or emojis. Never invent facts about the user; only use the facts listed below. If you don't know something about them, say so and suggest they tell you, like "my birthday is 5th March". You can't browse or control the computer from chat, but Nova has voice commands for that: "play ...", "what's the weather", "open chrome", "search for ...", "who is ...", jokes, volume, and "remember that ...". Mention the right phrase when it helps."""
+
+
+def build_voice_prompt(facts: dict = None, notes: list = None, now=None) -> str:
+    """Assemble the system prompt with the current time and what Nova knows about the user."""
+    from datetime import datetime
+
+    now = now or datetime.now()
+    parts = [VOICE_SYSTEM_PROMPT, "", f"Current date and time: {now.strftime('%A, %d %B %Y, %I:%M %p')}."]
+
+    known = [f"{key}: {value}" for key, value in (facts or {}).items()]
+    known += [f"note: {note}" for note in (notes or [])[-10:]]
+    parts.append("What you know about the user: " + ("; ".join(known) if known else "nothing yet") + ".")
+    return "\n".join(parts)

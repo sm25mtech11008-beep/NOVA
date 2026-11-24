@@ -24,6 +24,11 @@ APP_COMMANDS = {
     "calculator": ("calc", ["open", "-a", "Calculator"], ["gnome-calculator"]),
     "explorer": ("explorer", ["open", "."], ["xdg-open", "."]),
     "file explorer": ("explorer", ["open", "."], ["xdg-open", "."]),
+    "settings": ("start ms-settings:", ["open", "-a", "System Settings"], ["gnome-control-center"]),
+    "task manager": ("taskmgr", ["open", "-a", "Activity Monitor"], ["gnome-system-monitor"]),
+    "command prompt": ("start cmd", ["open", "-a", "Terminal"], ["x-terminal-emulator"]),
+    "terminal": ("start wt || start cmd", ["open", "-a", "Terminal"], ["x-terminal-emulator"]),
+    "paint": ("mspaint", ["open", "-a", "Preview"], ["pinta"]),
 }
 
 
@@ -53,7 +58,7 @@ def open_app(name: str) -> bool:
     """Open a known application by friendly name (e.g. 'chrome', 'notepad')."""
     name = (name or "").strip().lower()
 
-    if name in ("vs code", "vscode", "code"):
+    if name in ("vs code", "vscode", "code", "visual studio code"):
         return openVSCode()
 
     if name not in APP_COMMANDS:

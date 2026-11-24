@@ -138,7 +138,7 @@ def main():
     print("\n📋 Summary:")
     print("  ✓ system_prompt.py - System prompt configuration")
     print("  ✓ context_memory.py - Memory and context system (persisted to disk)")
-    print("  ✓ gpt_module.py - Offline DialoGPT fallback with system prompt")
+    print("  ✓ gpt_module.py - Offline conversation model (Ollama or local Hugging Face)")
     print("  ✓ intent.py - Fast offline keyword/regex intent detection")
     print("  ✓ commands.py - Command handlers (web, wiki, weather, apps, system control)")
     print("  ✓ assistant.py - Multi-step reasoning pipeline")

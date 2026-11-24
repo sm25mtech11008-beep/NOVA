@@ -1,4 +1,4 @@
-# Nova Voice Assistant - Requirements (Upgraded)
+# Nova Voice Assistant - Requirements
 # Install with: pip install -r requirements.txt
 
 # ─── Speech ───────────────────────────────────────────
@@ -6,20 +6,17 @@ SpeechRecognition>=3.10.0
 pyttsx3>=2.90
 pyaudio>=0.2.13
 
-# ─── NLP & Deep Learning ─────────────────────────────
-transformers>=4.38.0        # DialoGPT offline conversation fallback
-torch>=2.0.0                # PyTorch backend (CPU version fine for most)
-
 # ─── Utilities ────────────────────────────────────────
+requests>=2.31.0            # Ollama, weather
 wikipedia>=1.4.0
-pywhatkit>=5.4               # YouTube playback
+pywhatkit>=5.4              # YouTube playback
 python-dotenv>=1.0.0        # .env config loading
-requests>=2.31.0
 
-# ─── Optional: Sentiment Analysis ────────────────────
-# Uncomment below if you want mood-aware responses
-# vaderSentiment>=3.3.2
-
-# ─── NOTE: openai package REMOVED ────────────────────
-# The openai package has been replaced with local
-# Hugging Face models (free, offline, no API key needed)
+# ─── Conversation model ──────────────────────────────
+# Recommended: install Ollama (https://ollama.com) and run
+#     ollama pull qwen2.5:1.5b
+# Nova uses it automatically -- no extra Python packages needed.
+#
+# Fallback when Ollama isn't installed: a small Hugging Face model run in Python.
+transformers>=4.38.0
+torch>=2.0.0

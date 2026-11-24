@@ -1,35 +1,47 @@
 # core/speech.py
-import platform
-import pyttsx3
 import logging
+import platform
+
+import config
+
+_muted = False
+
 
 def _init_engine():
     try:
+        import pyttsx3
         system = platform.system().lower()
         if system == "windows":
-            return pyttsx3.init('sapi5')
+            engine = pyttsx3.init("sapi5")
         elif system == "darwin":
-            return pyttsx3.init('nsss')
+            engine = pyttsx3.init("nsss")
         else:
-            return pyttsx3.init('espeak')
+            engine = pyttsx3.init("espeak")
+        voices = engine.getProperty("voices")
+        if voices:
+            engine.setProperty("voice", voices[0].id)
+        engine.setProperty("rate", config.SPEECH_RATE)
+        return engine
     except Exception:
-        logging.exception("Failed to initialize pyttsx3 engine.")
+        logging.exception("Failed to initialize the text-to-speech engine; replies will be text only.")
         return None
 
+
 engine = _init_engine()
-if engine:
-    voices = engine.getProperty('voices')
-    if voices:
-        engine.setProperty('voice', voices[0].id)
+
+
+def set_muted(muted: bool):
+    """Turn spoken output off/on (text is still printed)."""
+    global _muted
+    _muted = muted
+
 
 def speak(text: str):
     """Convert text to speech."""
-    if not engine:
-        print(f"[speak disabled] {text}")
+    if not text or _muted or not engine:
         return
     try:
         engine.say(text)
         engine.runAndWait()
     except Exception:
         logging.exception("Speech synthesis failed.")
-
