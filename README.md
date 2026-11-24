@@ -12,37 +12,75 @@ It recognizes voice commands, speaks back, opens websites, plays YouTube videos,
 - 📚 Fetches Wikipedia summaries
 - 🎵 Plays YouTube music, mood playlists, and fun facts
 - ⛅ Live weather lookups (no API key required)
-- 🖥️ Launches apps (VS Code, Chrome, Notepad, Calculator, File Explorer) and controls the system (lock screen, volume, mute)
-- 🤖 Generates offline conversational AI responses (DialoGPT, no internet needed)
+- 🖥️ Launches apps (VS Code, Chrome, Notepad, Calculator, File Explorer, Settings, Task Manager, Terminal, Paint) and controls the system (lock screen, volume, mute)
+- 🤖 Offline conversation through a real chat model (Ollama, or a small built-in Hugging Face model), streamed so Nova starts talking sooner
+- 🎂 Remembers facts about you ("my birthday is 5th March", "what's my name", "what do you know about me")
+- 🔁 Follow-up questions ("play something" → "What would you like me to play?" → "arijit singh")
+- 👂 Forgiving wake word ("Hey Nova", or mishearings like "Innova"), and you can say the command in the same breath
 - 🎯 Fast, fully offline keyword/regex intent detection — no model download on the critical path
 - 🧠 Context-aware conversation with a memory system
 - 💾 Conversation history, preferences, and active projects persisted to disk across restarts
-- ⚡ Voice-optimized responses (5-20 seconds)
+- ⚡ Short, voice-friendly replies (one or two sentences, no markdown)
 - 🎭 Personality-driven responses (intelligent, calm, witty)
+
+## 🆕 What's New
+
+- **Real conversation model.** DialoGPT echoed its own prompt ("Context : System Context…") and gave one-word answers. It has been replaced by Ollama, or a small instruction-tuned Hugging Face model as a fallback.
+- **Personal memory.** Nova remembers your name, birthday and notes, and answers "when is my birthday" with the days remaining.
+- **Follow-ups.** When Nova asks "What would you like me to play?", your next sentence is treated as the answer.
+- **Better listening.** The wake word tolerates mishearings, the microphone is calibrated once instead of before every phrase, background noise is ignored quietly, and Nova goes back to sleep after 90 seconds of silence.
+- **Smarter commands.** "what time is it", "play something motivational", "search for …", "what can you do" and more phrasings are understood. Tests live in `tests/`.
 
 ## 🚀 Quick Start
 
 ### Setup
 ```bash
-git clone https://github.com/<your-username>/nova-voice-assistant.git
-cd nova-voice-assistant
+git clone https://github.com/sm25mtech11008-beep/NOVA.git
+cd NOVA
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+### Set up the conversation model (recommended)
+Install [Ollama](https://ollama.com), then pull a model. Smaller models answer faster on a CPU:
+```bash
+ollama pull qwen2.5:1.5b      # fast, good for voice
+```
+Nova uses the first installed Ollama model automatically (set `NOVA_OLLAMA_MODEL` in `.env` to choose one).
+Without Ollama, Nova falls back to `Qwen/Qwen2.5-0.5B-Instruct` via transformers (downloaded once, ~1 GB).
+
 ### Run (voice mode)
 ```bash
 python main.py
 ```
-Say "Hey Nova" to wake it up, then speak a command. Say "go to sleep" to return to passive listening.
+Say "Hey Nova" (or "Hey Nova, what's the time?"), then keep talking. Say "go to sleep", or stay quiet for 90 seconds, to put it back to sleep.
+
+### Things to say
+| Say | What happens |
+|---|---|
+| "play arijit singh songs" / "play something relaxing" | Plays on YouTube |
+| "what's the weather in Mumbai" | Live weather |
+| "what time is it" / "what's the date" | Time / date |
+| "open chrome" / "open youtube" | Opens apps and websites |
+| "search for best biryani" / "who is Ada Lovelace" | Google / Wikipedia |
+| "my name is …" / "my birthday is 5th March" / "remember that …" | Nova remembers it |
+| "when is my birthday" / "what do you know about me" / "forget my birthday" | Recall / forget |
+| "turn up the volume" / "mute" / "lock the screen" | System control |
+| "tell me a joke" / "what can you do" | Fun / help |
+| anything else | Answered by the conversation model |
 
 ### Run (text mode, no microphone needed)
 ```bash
-python main.py --text
+python main.py --text           # add --mute to turn off spoken replies, --debug for logs
 ```
 
-### Pre-download the offline AI model (optional, speeds up first run)
+### Run the tests
+```bash
+python -m pytest tests
+```
+
+### One-time model setup (optional, speeds up first run)
 ```bash
 python -m core.download_model
 ```
@@ -98,7 +136,8 @@ Never robotic, overly formal, or overly emotional.
 ### Core Modules
 - **`core/intent.py`** - Fast, fully offline keyword/regex intent detection
 - **`core/commands.py`** - Command handlers (websites, Wikipedia, YouTube, weather, apps, system control)
-- **`core/gpt_module.py`** - DialoGPT-based conversational fallback with system prompt guidance
+- **`core/gpt_module.py`** - Conversation model (Ollama or local Hugging Face), streamed sentence by sentence
+- **`core/wakeword.py`** - Forgiving wake-word matching
 - **`core/assistant.py`** - The pipeline that ties intent detection, commands, AI fallback, and memory together
 - **`core/weather.py`** - Keyless weather lookups (Open-Meteo)
 - **`core/apps.py`** - App launching and system control (lock screen, volume)
@@ -163,11 +202,18 @@ memory.add_active_project("Machine Learning Research")
 - **Speech Recognition**: Google Speech API (SpeechRecognition)
 - **Text-to-Speech**: pyttsx3
 - **Intent Detection**: Regex/keyword rules (fast, offline, no model download)
-- **AI Model**: DialoGPT-medium (offline conversational fallback)
+- **AI Model**: any Ollama model (recommended), or Qwen2.5-0.5B-Instruct via transformers
 - **Framework**: Transformers (Hugging Face)
 - **Weather**: Open-Meteo (free, no API key)
 - **Backend**: Python 3.8+
 - **Execution**: Local — the AI model runs fully offline; websites, Wikipedia, YouTube, and weather commands need internet like any browser action would
+
+## 🩺 Troubleshooting
+
+- **Replies are slow** – a 4B model on CPU takes ~10 s per answer. Pull a smaller one (`ollama pull qwen2.5:1.5b`) and set `NOVA_OLLAMA_MODEL=qwen2.5:1.5b` in `.env`.
+- **"My conversation model isn't available"** – start Ollama, or run `python -m core.download_model`.
+- **Nova doesn't wake up** – watch what it heard (printed as `You: …`) and add that mishearing to `WAKE_WORDS` in `config.py`.
+- **Reacts to background noise** – it ignores unclear audio and goes back to sleep after `NOVA_ACTIVE_TIMEOUT` seconds (default 90).
 
 ## 🛡️ Safety Features
 
@@ -193,7 +239,8 @@ nova/
 ├── core/
 │   ├── system_prompt.py       # System prompt config
 │   ├── context_memory.py      # Memory system (persisted to data/memory.json)
-│   ├── gpt_module.py          # DialoGPT offline conversation fallback
+│   ├── gpt_module.py          # Conversation model (Ollama / Hugging Face)
+│   ├── wakeword.py            # Forgiving wake-word matching
 │   ├── assistant.py           # Pipeline: intent -> command/AI -> speech -> memory
 │   ├── intent.py              # Fast offline keyword/regex intent detection
 │   ├── commands.py            # Command handlers
@@ -204,6 +251,7 @@ nova/
 │   └── download_model.py
 ├── main.py                    # Voice mode (default) or --text mode
 ├── config.py                  # Central configuration
+├── tests/                     # Intent + wake-word tests
 ├── verify_implementation.py   # Verification script
 ├── requirements.txt
 └── README.md
@@ -249,4 +297,4 @@ Nova aims to be a **local-first, privacy-respecting voice assistant** with:
 
 **Status**: ✅ Working end-to-end (voice + text mode), offline conversational fallback, persistent memory
 
-**Last Updated**: 2026-08-23
+**Last Updated**: 2026-11-24

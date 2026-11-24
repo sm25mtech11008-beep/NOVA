@@ -2,103 +2,121 @@
 """
 Entrypoint for Nova.
 
-Voice mode (default): passive-listens for a wake word, then actively
-processes commands through core.assistant.process_command until a sleep
-word or exit is heard.
+Voice mode (default):  python main.py
+    Say "Hey Nova" (optionally followed by a command), then keep talking.
+    Say "go to sleep" -- or stay quiet for a while -- to put Nova back to sleep.
 
-Text mode (`python main.py --text`): a plain CLI chat loop using the same
-assistant pipeline, no microphone required -- handy for development,
-testing, or headless use.
+Text mode:  python main.py --text
+    Type instead of talking. Add --mute to turn off the spoken replies.
 """
 
 import argparse
+import logging
 import sys
 import time
-import logging
 
 import config
-from core.speech import speak
-from core.assistant import process_command
+from core.assistant import process_command, say
+from core.gpt_module import warm_up_in_background
+from core.speech import set_muted
+from core.wakeword import split_wake_word
+
+# Windows consoles/redirects may not be UTF-8; never crash on an emoji.
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure:
+        _reconfigure(errors="replace")
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    datefmt="%H:%M:%S",
 )
 
+BANNER = """
+──────────────────────────────────────────────
+  Nova is ready.
+  • Say "Hey Nova" to wake me (you can add a command: "Hey Nova, what's the time?")
+  • Try: "play lofi music", "what's the weather", "my birthday is 5th March",
+         "open chrome", "tell me a joke", "what can you do"
+  • Say "go to sleep" when you're done. Ctrl+C quits.
+──────────────────────────────────────────────"""
 
-def safe_listen():
-    """Wrapper around takeCommand() that always returns a normalized string."""
+
+def listen(verbose: bool = True) -> str:
     from core.listener import takeCommand
-    try:
-        result = takeCommand()
-        return str(result).strip().lower() if result else ""
-    except Exception:
-        logging.exception("Error while listening:")
-        time.sleep(0.5)
-        return ""
+    return takeCommand(verbose=verbose)
 
 
 def active_listen():
-    logging.info("Nova is active now.")
+    """Handle commands until the user says a sleep word or goes quiet."""
+    last_heard = time.time()
+    while True:
+        query = listen()
+        if not query:
+            if time.time() - last_heard > config.ACTIVE_TIMEOUT_SECONDS:
+                print("💤 No commands for a while, going back to sleep. Say 'Hey Nova' to wake me.")
+                return True
+            continue
+
+        last_heard = time.time()
+        if any(word in query.lower() for word in config.SLEEP_WORDS):
+            say("Okay, going to sleep. Say 'Hey Nova' when you need me.")
+            return True
+
+        if not process_command(query):
+            return False  # exit requested
+
+
+def voice_mode():
+    print(BANNER)
+    print("😴 Waiting for 'Hey Nova'...")
     try:
         while True:
-            query = safe_listen()
-            if not query:
+            query = listen(verbose=False)
+            woke, command = split_wake_word(query)
+            if not woke:
                 continue
 
-            if any(sleep_word in query for sleep_word in config.SLEEP_WORDS):
-                speak("Going to sleep. Say 'Hey Nova' to wake me again.")
-                break
+            if command.strip():
+                # "Hey Nova, what's the time?" -- handle the command right away.
+                if not process_command(command):
+                    return
+            else:
+                say("Yes?")
 
-            keep_going = process_command(query)
-            if not keep_going:
-                sys.exit(0)
-
+            if not active_listen():
+                return
+            print("😴 Waiting for 'Hey Nova'...")
     except KeyboardInterrupt:
-        logging.info("Interrupted by user while active. Returning to passive mode.")
-    except Exception:
-        logging.exception("Unhandled exception in active_listen(). Returning to passive.")
-
-
-def passive_listen():
-    logging.info("Nova is sleeping. Waiting for wake word...")
-    try:
-        while True:
-            query = safe_listen()
-            if not query:
-                continue
-
-            if any(wake_word in query for wake_word in config.WAKE_WORDS):
-                logging.info("Wake word detected.")
-                speak("Yes, I'm here!")
-                active_listen()
-                logging.info("Returned to passive listening.")
-    except KeyboardInterrupt:
-        logging.info("Interrupted by user. Exiting.")
-        sys.exit(0)
+        print("\nGoodbye!")
 
 
 def text_mode():
-    print("Nova text mode. Type a command, or 'exit' to quit.\n")
+    print("Nova text mode. Type a message, or 'exit' to quit. Try 'what can you do'.\n")
     try:
         while True:
             query = input("You: ").strip()
-            if not query:
-                continue
-            keep_going = process_command(query)
-            if not keep_going:
+            if query and not process_command(query):
                 break
     except (KeyboardInterrupt, EOFError):
-        print("\nGoodbye, sir!")
+        print("\nGoodbye!")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Nova voice assistant")
-    parser.add_argument("--text", action="store_true", help="Run in text-only mode (no microphone required)")
+    parser.add_argument("--text", action="store_true", help="type instead of talking (no microphone needed)")
+    parser.add_argument("--mute", action="store_true", help="don't speak replies out loud")
+    parser.add_argument("--debug", action="store_true", help="show detailed logs")
     args = parser.parse_args()
+
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+    set_muted(args.mute)
+    warm_up_in_background()  # load the conversation model while we wait for the user
 
     if args.text:
         text_mode()
     else:
-        passive_listen()
+        voice_mode()
+    sys.exit(0)

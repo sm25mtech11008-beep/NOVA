@@ -67,6 +67,7 @@ class ContextMemory:
             "intent": intent,
         }
         self.conversation_history.append(exchange)
+        self.conversation_history = self.conversation_history[-config.MAX_SAVED_EXCHANGES:]
         self.last_intent = intent
         self._save_to_disk()
         logger.debug(f"Added exchange: {intent}")
@@ -92,6 +93,40 @@ class ContextMemory:
     def get_preference(self, key: str, default=None):
         """Retrieve user preference"""
         return self.user_preferences.get(key, default)
+
+    # ── Facts about the user ("my birthday is 5th March") ──────────────
+
+    def get_facts(self) -> Dict[str, str]:
+        """All remembered facts, e.g. {"name": "Shashi", "birthday": "5th march"}."""
+        facts = dict(self.user_preferences.get("facts", {}))
+        legacy_name = self.user_preferences.get("user_name")
+        if legacy_name and "name" not in facts:
+            facts["name"] = legacy_name
+        return facts
+
+    def get_fact(self, key: str) -> Optional[str]:
+        return self.get_facts().get(key)
+
+    def set_fact(self, key: str, value: str):
+        facts = self.user_preferences.setdefault("facts", {})
+        facts[key] = value
+        self._save_to_disk()
+
+    def delete_fact(self, key: str) -> bool:
+        removed = self.user_preferences.get("facts", {}).pop(key, None) is not None
+        if key == "name" and self.user_preferences.pop("user_name", None) is not None:
+            removed = True
+        if removed:
+            self._save_to_disk()
+        return removed
+
+    def get_notes(self) -> List[str]:
+        return list(self.user_preferences.get("notes", []))
+
+    def add_note(self, note: str):
+        notes = self.user_preferences.setdefault("notes", [])
+        notes.append(note)
+        self._save_to_disk()
 
     def add_active_project(self, project_name: str):
         """Track active projects"""

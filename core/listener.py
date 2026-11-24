@@ -1,48 +1,79 @@
 # core/listener.py
-import speech_recognition as sr
-from core.speech import speak
-import webbrowser
+"""
+Microphone input -> text, via Google's free speech recognition.
+
+The recognizer is created and calibrated to the room's background noise
+once, instead of spending a second re-calibrating before every phrase
+(which also cut off the first words people said).
+"""
+
 import logging
+import time
+
+import speech_recognition as sr
 
 import config
 
-def takeCommand(timeout=config.LISTEN_TIMEOUT, phrase_time_limit=config.PHRASE_TIME_LIMIT):
+_recognizer = None
+_last_network_warning = 0.0
+
+
+def _get_recognizer() -> sr.Recognizer:
+    global _recognizer
+    if _recognizer is None:
+        r = sr.Recognizer()
+        r.dynamic_energy_threshold = True     # keeps adapting to background noise
+        r.pause_threshold = config.PAUSE_THRESHOLD
+        r.non_speaking_duration = min(0.5, config.PAUSE_THRESHOLD)
+        try:
+            with sr.Microphone() as source:
+                print("🎙️  Calibrating microphone, please stay quiet for a moment...")
+                r.adjust_for_ambient_noise(source, duration=1.5)
+            # Don't let a silent room make it trigger on every tiny sound.
+            r.energy_threshold = max(r.energy_threshold, 300)
+        except Exception:
+            logging.exception("Microphone calibration failed:")
+        _recognizer = r
+    return _recognizer
+
+
+def takeCommand(timeout=config.LISTEN_TIMEOUT, phrase_time_limit=config.PHRASE_TIME_LIMIT,
+                verbose: bool = True) -> str:
     """
-    Listen from microphone and return recognized speech as text.
-    Returns None if nothing recognized or error occurs.
+    Listen on the microphone and return the recognized text ("" if nothing).
+
+    verbose=False keeps the console quiet (used while Nova waits for its
+    wake word), so it doesn't print a line every few seconds.
     """
-    r = sr.Recognizer()
+    global _last_network_warning
+    r = _get_recognizer()
+
     try:
         with sr.Microphone() as source:
-            print("🎤 Listening...")
-            r.adjust_for_ambient_noise(source, duration=1)
+            if verbose:
+                print("🎤 Listening...")
             audio = r.listen(source, timeout=timeout, phrase_time_limit=phrase_time_limit)
     except sr.WaitTimeoutError:
-        print("⏰ Timeout: No speech detected.")
-        return None
-    except Exception as e:
+        return ""
+    except Exception:
         logging.exception("Microphone error:")
-        return None
+        time.sleep(1)
+        return ""
 
     try:
-        print("🧠 Recognizing...")
-        query = r.recognize_google(audio, language="en-in")
-        print(f"🗣️ User said: {query}\n")
-
-        # Inline Google search trigger
-        if "search on google" in query.lower():
-            search_term = query.lower().replace("search on google", "").strip()
-            speak(f"Searching {search_term} on Google...")
-            webbrowser.open(f"https://www.google.com/search?q={search_term}")
-            return None
-
-        return query
-
+        query = r.recognize_google(audio, language=config.SPEECH_LANGUAGE)
+        print(f"🗣️  You: {query}")
+        return query.strip()
     except sr.UnknownValueError:
-        print("🤖 Sorry, I couldn't understand that.")
+        # Background noise or mumbling -- ignore quietly.
+        if verbose:
+            print("   (didn't catch that)")
     except sr.RequestError:
-        print("⚠️ Speech service unavailable. Check your internet connection.")
+        now = time.time()
+        if now - _last_network_warning > 30:
+            print("⚠️  Speech recognition needs internet. Check your connection.")
+            _last_network_warning = now
+        time.sleep(2)
     except Exception:
         logging.exception("Recognition error:")
-
-    return None
+    return ""
